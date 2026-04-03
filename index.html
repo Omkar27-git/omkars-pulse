@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Omkar's Pulse</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="manifest" href="/manifest.json">
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap');
+    body { font-family: 'Inter', sans-serif; }
+    .glass { background: rgba(255,255,255,0.08); backdrop-filter: blur(16px); }
+    .card { transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); }
+    .card:hover { transform: scale(1.05); box-shadow: 0 25px 50px -12px rgb(192 38 211); }
+    .scroll-animate { opacity: 0; transform: translateY(20px); transition: all 0.6s ease; }
+    .scroll-animate.visible { opacity: 1; transform: translateY(0); }
+    .pin-input { font-size: 2rem; letter-spacing: 1rem; }
+  </style>
+</head>
+<body class="bg-[#0a0a0a] text-white min-h-screen overflow-hidden">
+
+  <!-- PIN Lock Screen -->
+  <div id="pin-screen" class="fixed inset-0 bg-black/95 flex items-center justify-center z-[200]">
+    <div class="text-center px-6">
+      <div class="mb-8">
+        <div class="w-20 h-20 mx-auto bg-gradient-to-br from-purple-500 to-pink-500 rounded-3xl flex items-center justify-center text-5xl">🔒</div>
+        <h1 class="text-4xl font-bold mt-6">Omkar's Pulse</h1>
+        <p class="text-white/60 mt-2">Enter your 4-digit PIN to unlock</p>
+      </div>
+      <input id="pin-input" type="password" maxlength="4" inputmode="numeric" 
+             class="pin-input bg-white/10 text-center w-64 py-6 rounded-3xl outline-none border border-white/20 focus:border-purple-500">
+      <div class="mt-8 flex justify-center gap-4">
+        <button onclick="verifyPin()" 
+                class="px-10 py-4 bg-gradient-to-r from-purple-500 to-pink-500 rounded-3xl font-semibold text-lg">Unlock</button>
+        <button onclick="clearPin()" 
+                class="px-8 py-4 bg-white/10 hover:bg-white/20 rounded-3xl font-semibold text-lg">Clear</button>
+      </div>
+      <p id="pin-error" class="text-red-400 mt-6 hidden">Wrong PIN! Try again.</p>
+    </div>
+  </div>
+
+  <!-- Main App -->
+  <div id="main-app" class="hidden flex h-screen flex-col md:flex-row">
+
+    <!-- Sidebar -->
+    <div class="w-full md:w-72 bg-black/80 flex flex-col border-b md:border-r border-white/10 md:border-b-0">
+      <div class="p-6 flex items-center gap-3">
+        <div class="w-10 h-10 bg-gradient-to-br from-purple-500 to-pink-500 rounded-2xl flex items-center justify-center text-2xl">🎵</div>
+        <h1 class="text-3xl font-bold tracking-tighter">Omkar's Pulse</h1>
+      </div>
+      
+      <nav class="flex-1 px-4 py-2">
+        <a onclick="showLibrary()" class="flex items-center gap-4 px-6 py-4 hover:bg-white/10 rounded-3xl text-lg font-medium">📚 Library</a>
+      </nav>
+
+      <div class="p-6">
+        <button onclick="document.getElementById('upload').click()" 
+                class="w-full py-4 bg-gradient-to-r from-purple-500 to-pink-500 rounded-3xl font-semibold text-lg flex items-center justify-center gap-3 hover:scale-105 transition">
+          ⬆️ Add Music / Video
+        </button>
+        <input type="file" id="upload" multiple accept="audio/*,video/*" class="hidden" onchange="handleUpload(event)">
+      </div>
+    </div>
+
+    <!-- Main Content -->
+    <div class="flex-1 flex flex-col min-h-0">
+      <!-- Top Bar -->
+      <div class="h-16 border-b border-white/10 flex items-center px-4 md:px-8 justify-between glass">
+        <input id="search" type="text" placeholder="Search your songs..." 
+               class="bg-white/10 w-full max-w-md px-6 py-3 rounded-3xl focus:outline-none text-lg"
+               onkeyup="filterSongs()">
+        <button onclick="logoutPin()" class="ml-4 text-sm text-white/60 hover:text-white">Lock App</button>
+      </div>
+
+      <!-- Library Header -->
+      <div class="px-4 md:px-8 pt-8 pb-4">
+        <h2 class="text-4xl md:text-5xl font-bold tracking-tighter">Your Library</h2>
+        <p id="song-count" class="text-white/60 mt-1">0 songs • Offline ready</p>
+      </div>
+
+      <!-- Songs List with Animated Scroll -->
+      <div id="songs-container" class="flex-1 px-4 md:px-8 overflow-y-auto pb-32 space-y-3 md:space-y-2 pr-2 md:pr-6 scroll-smooth">
+        <!-- Songs populated by JavaScript -->
+      </div>
+    </div>
+  </div>
+
+  <!-- Bottom Player -->
+  <div id="player" class="hidden fixed bottom-0 left-0 right-0 h-24 bg-black/95 border-t border-white/10 glass flex items-center px-4 md:px-8 gap-4 z-50">
+    <div class="flex items-center gap-4 flex-1 min-w-0">
+      <div id="now-cover" class="w-12 h-12 bg-gradient-to-br from-purple-500 to-pink-500 rounded-2xl flex items-center justify-center text-3xl flex-shrink-0">🎵</div>
+      <div class="min-w-0 flex-1">
+        <div id="now-title" class="font-semibold truncate">No song playing</div>
+        <div id="now-artist" class="text-sm text-white/60 truncate">Upload your video music</div>
+      </div>
+    </div>
+
+    <div class="flex-1 flex flex-col items-center gap-1 max-w-md">
+      <div class="flex items-center gap-6 md:gap-8 text-3xl">
+        <button onclick="prevSong()" class="hover:text-purple-400 transition">⏮</button>
+        <button id="play-btn" onclick="togglePlay()" class="text-4xl hover:scale-110 transition">▶️</button>
+        <button onclick="nextSong()" class="hover:text-purple-400 transition">⏭</button>
+      </div>
+      <div class="w-full flex items-center gap-3 text-xs">
+        <span id="current-time">0:00</span>
+        <input id="progress" type="range" class="player-progress flex-1 accent-purple-500" min="0" max="100" value="0" oninput="seekAudio()">
+        <span id="duration">0:00</span>
+      </div>
+    </div>
+
+    <div class="flex-1 flex justify-end items-center gap-4">
+      <button onclick="toggleVideoMode()" class="hidden md:flex px-5 py-2 bg-white/10 hover:bg-white/20 rounded-3xl text-sm items-center gap-2">
+        📺 Watch Video
+      </button>
+      <input type="range" id="volume" min="0" max="1" step="0.01" value="1" class="w-24 accent-purple-500" oninput="audio.volume = this.value">
+    </div>
+  </div>
+
+  <!-- Video Modal -->
+  <div id="video-modal" onclick="if(event.target===this)hideVideo()" class="hidden fixed inset-0 bg-black/90 z-[100] flex items-center justify-center p-4">
+    <div class="max-w-5xl w-full">
+      <video id="video-player" controls class="w-full rounded-3xl shadow-2xl" autoplay></video>
+    </div>
+  </div>
+
+  <script>
+    // Tailwind
+    tailwind.config = { content: [], theme: { extend: {} } };
+
+    // PIN Security
+    const PIN_KEY = 'omkarPulsePin';
+    let currentPin = localStorage.getItem(PIN_KEY);
+
+    function showPinScreen() {
+      document.getElementById('pin-screen').classList.remove('hidden');
+      document.getElementById('main-app').classList.add('hidden');
+      document.getElementById('pin-input').focus();
+    }
+
+    function verifyPin() {
+      const entered = document.getElementById('pin-input').value.trim();
+      if (!currentPin) {
+        if (entered.length === 4) {
+          localStorage.setItem(PIN_KEY, entered);
+          currentPin = entered;
+          unlockApp();
+        }
+      } else if (entered === currentPin) {
+        unlockApp();
+      } else {
+        document.getElementById('pin-error').classList.remove('hidden');
+        setTimeout(() => document.getElementById('pin-error').classList.add('hidden'), 2000);
+      }
+    }
+
+    function clearPin() {
+      document.getElementById('pin-input').value = '';
+    }
+
+    function unlockApp() {
+      document.getElementById('pin-screen').classList.add('hidden');
+      document.getElementById('main-app').classList.remove('hidden');
+      initDB();
+    }
+
+    function logoutPin() {
+      document.getElementById('pin-input').value = '';
+      showPinScreen();
+    }
+
+    // Music Player Logic
+    let db, songs = [], currentIndex = -1, audio = new Audio(), currentBlobUrl = null;
+
+    function initDB() {
+      const request = indexedDB.open('OmkarPulseDB', 1);
+      request.onupgradeneeded = e => {
+        db = e.target.result;
+        if (!db.objectStoreNames.contains('songs')) {
+          db.createObjectStore('songs', { keyPath: 'id', autoIncrement: true });
+        }
+      };
+      request.onsuccess = e => {
+        db = e.target.result;
+        loadSongs();
+      };
+    }
+
+    function loadSongs() {
+      const tx = db.transaction('songs', 'readonly');
+      tx.objectStore('songs').getAll().onsuccess = e => {
+        songs = e.target.result;
+        document.getElementById('song-count').textContent = `${songs.length} songs • Offline ready`;
+        renderSongs(songs);
+      };
+    }
+
+    function renderSongs(filteredSongs) {
+      const container = document.getElementById('songs-container');
+      container.innerHTML = '';
+      filteredSongs.forEach((song, i) => {
+        const card = document.createElement('div');
+        card.className = `card flex items-center gap-6 px-6 py-5 glass rounded-3xl cursor-pointer scroll-animate`;
+        card.innerHTML = `
+          <div class="w-12 h-12 bg-gradient-to-br from-purple-400 to-pink-400 rounded-2xl flex items-center justify-center text-4xl flex-shrink-0">🎵</div>
+          <div class="flex-1 min-w-0">
+            <p class="font-semibold truncate">${song.name}</p>
+            <p class="text-sm text-white/60">MP3 / MP4 / Video • Offline</p>
+          </div>
+          <button onclick="event.stopImmediatePropagation(); playSong(${i});" class="w-12 h-12 bg-white/10 hover:bg-white/20 rounded-2xl flex items-center justify-center text-3xl">▶️</button>
+        `;
+        card.onclick = () => playSong(i);
+        container.appendChild(card);
+        setTimeout(() => card.classList.add('visible'), 30 + i * 25);
+      });
+    }
+
+    function filterSongs() {
+      const term = document.getElementById('search').value.toLowerCase();
+      const filtered = songs.filter(s => s.name.toLowerCase().includes(term));
+      renderSongs(filtered);
+    }
+
+    async function handleUpload(e) {
+      const files = Array.from(e.target.files);
+      const tx = db.transaction('songs', 'readwrite');
+      const store = tx.objectStore('songs');
+      for (const file of files) {
+        if (file.type.startsWith('audio/') || file.type.startsWith('video/')) {
+          store.add({ name: file.name, blob: file });
+        }
+      }
+      tx.oncomplete = () => {
+        loadSongs();
+        alert(`✅ Successfully added ${files.length} files! They are now stored offline.`);
+      };
+    }
+
+    function playSong(index) {
+      currentIndex = index;
+      const song = songs[index];
+      if (currentBlobUrl) URL.revokeObjectURL(currentBlobUrl);
+      
+      currentBlobUrl = URL.createObjectURL(song.blob);
+      audio.src = currentBlobUrl;
+      audio.play();
+      
+      document.getElementById('player').classList.remove('hidden');
+      document.getElementById('now-title').textContent = song.name;
+      document.getElementById('now-artist').textContent = 'Video Music';
+      document.getElementById('play-btn').innerHTML = '⏸️';
+      
+      audio.ontimeupdate = () => {
+        const progress = audio.duration ? (audio.currentTime / audio.duration) * 100 : 0;
+        document.getElementById('progress').value = progress;
+        document.getElementById('current-time').textContent = formatTime(audio.currentTime);
+      };
+      audio.ondurationchange = () => {
+        document.getElementById('duration').textContent = formatTime(audio.duration);
+      };
+      audio.onended = nextSong;
+    }
+
+    function togglePlay() {
+      if (audio.paused) {
+        audio.play();
+        document.getElementById('play-btn').innerHTML = '⏸️';
+      } else {
+        audio.pause();
+        document.getElementById('play-btn').innerHTML = '▶️';
+      }
+    }
+
+    function nextSong() {
+      if (currentIndex < songs.length - 1) playSong(currentIndex + 1);
+    }
+
+    function prevSong() {
+      if (currentIndex > 0) playSong(currentIndex - 1);
+    }
+
+    function seekAudio() {
+      if (audio.duration) audio.currentTime = (document.getElementById('progress').value / 100) * audio.duration;
+    }
+
+    function formatTime(seconds) {
+      if (!seconds || isNaN(seconds)) return '0:00';
+      const min = Math.floor(seconds / 60);
+      const sec = Math.floor(seconds % 60);
+      return `${min}:${sec < 10 ? '0' : ''}${sec}`;
+    }
+
+    function toggleVideoMode() {
+      const song = songs[currentIndex];
+      if (!song || !currentBlobUrl) return;
+      const modal = document.getElementById('video-modal');
+      const videoEl = document.getElementById('video-player');
+      videoEl.src = currentBlobUrl;
+      modal.classList.remove('hidden');
+      videoEl.play();
+    }
+
+    function hideVideo() {
+      const modal = document.getElementById('video-modal');
+      const videoEl = document.getElementById('video-player');
+      videoEl.pause();
+      modal.classList.add('hidden');
+    }
+
+    function showLibrary() {
+      loadSongs();
+    }
+
+    // Start App
+    window.onload = () => {
+      if (!currentPin) {
+        showPinScreen();
+      } else {
+        showPinScreen();
+      }
+    };
+  </script>
+</body>
+</html>
