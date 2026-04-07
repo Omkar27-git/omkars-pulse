@@ -15,6 +15,20 @@
     .scroll-animate { opacity: 0; transform: translateY(20px); transition: all 0.6s ease; }
     .scroll-animate.visible { opacity: 1; transform: translateY(0); }
     .pin-input { font-size: 2rem; letter-spacing: 1rem; }
+    
+    /* Fixed Video Container */
+    .video-container {
+      max-width: 95%;
+      max-height: 85vh;
+      margin: 0 auto;
+    }
+    .video-container video {
+      width: 100%;
+      height: auto;
+      max-height: 80vh;
+      border-radius: 16px;
+      box-shadow: 0 25px 50px -12px rgb(0 0 0 / 0.5);
+    }
   </style>
 </head>
 <body class="bg-[#0a0a0a] text-white min-h-screen overflow-hidden">
@@ -47,14 +61,16 @@
         <a onclick="showLibrary()" class="flex items-center gap-4 px-6 py-4 hover:bg-white/10 rounded-3xl text-lg font-medium">📚 Library</a>
       </nav>
       <div class="p-4 md:p-6">
-        <button onclick="document.getElementById('upload').click()" class="w-full py-4 bg-gradient-to-r from-purple-500 to-pink-500 rounded-3xl font-semibold text-lg flex items-center justify-center gap-3">⬆️ Add Music or Video</button>
+        <button onclick="document.getElementById('upload').click()" 
+                class="w-full py-4 bg-gradient-to-r from-purple-500 to-pink-500 rounded-3xl font-semibold text-lg flex items-center justify-center gap-3">⬆️ Add Music or Video</button>
         <input type="file" id="upload" multiple accept="audio/*,video/*" class="hidden" onchange="handleUpload(event)">
       </div>
     </div>
 
     <div class="flex-1 flex flex-col min-h-0">
       <div class="h-16 border-b border-white/10 flex items-center px-4 md:px-8 justify-between glass">
-        <input id="search" type="text" placeholder="Search your songs..." class="bg-white/10 w-full max-w-md px-6 py-3 rounded-3xl focus:outline-none text-lg" onkeyup="filterSongs()">
+        <input id="search" type="text" placeholder="Search your songs..." 
+               class="bg-white/10 w-full max-w-md px-6 py-3 rounded-3xl focus:outline-none text-lg" onkeyup="filterSongs()">
         <button onclick="logoutPin()" class="ml-4 text-sm text-white/60 hover:text-white">Lock App</button>
       </div>
       <div class="px-4 md:px-8 pt-8 pb-4">
@@ -85,17 +101,30 @@
     </div>
   </div>
 
-  <!-- Video Modal with Auto Landscape -->
-  <div id="video-modal" onclick="if(event.target===this)hideVideo()" class="hidden fixed inset-0 bg-black/95 z-[100] flex items-center justify-center p-2">
-    <div class="max-w-6xl w-full">
-      <video id="video-player" controls class="w-full rounded-3xl" autoplay playsinline></video>
+  <!-- Video Modal - Fixed Size -->
+  <div id="video-modal" class="hidden fixed inset-0 bg-black/95 z-[100] flex flex-col">
+    <!-- Back Button -->
+    <div class="p-4 bg-black/80 border-b border-white/10 flex items-center">
+      <button onclick="hideVideo()" class="flex items-center gap-3 text-xl font-medium hover:text-purple-400 transition">
+        ← Back to Home
+      </button>
+    </div>
+
+    <!-- Video Container - Proper Size -->
+    <div class="flex-1 flex items-center justify-center p-4 bg-black video-container">
+      <video id="video-player" 
+             controls 
+             class="max-w-full max-h-[75vh] rounded-2xl shadow-2xl" 
+             autoplay 
+             playsinline>
+      </video>
     </div>
   </div>
 
   <script>
-    // PIN Logic
     const PIN_KEY = 'omkarPulsePin';
     let currentPin = localStorage.getItem(PIN_KEY);
+    let db, songs = [], currentIndex = -1, audio = new Audio(), currentBlobUrl = null;
 
     function showPinScreen() {
       document.getElementById('pin-screen').classList.remove('hidden');
@@ -127,9 +156,6 @@
     }
     function logoutPin() { showPinScreen(); }
 
-    // Database + Player
-    let db, songs = [], currentIndex = -1, audio = new Audio(), currentBlobUrl = null;
-
     function initDB() {
       const request = indexedDB.open('OmkarPulseDB', 1);
       request.onupgradeneeded = e => {
@@ -155,17 +181,28 @@
         const card = document.createElement('div');
         card.className = `card flex items-center gap-6 px-6 py-5 glass rounded-3xl cursor-pointer scroll-animate`;
         card.innerHTML = `
-          <div class="w-12 h-12 bg-gradient-to-br from-purple-400 to-pink-400 rounded-2xl flex items-center justify-center text-4xl">🎵</div>
+          <div class="w-12 h-12 bg-gradient-to-br from-purple-400 to-pink-400 rounded-2xl flex items-center justify-center text-4xl flex-shrink-0">🎵</div>
           <div class="flex-1 min-w-0">
             <p class="font-semibold truncate">${song.name}</p>
             <p class="text-sm text-white/60">${song.type?.startsWith('video') ? '🎥 Video' : '🎵 Audio'} • Offline</p>
           </div>
           <button onclick="event.stopImmediatePropagation(); playSong(${i});" class="w-12 h-12 bg-white/10 hover:bg-white/20 rounded-2xl text-3xl">▶️</button>
+          <button onclick="event.stopImmediatePropagation(); deleteSong(${i});" class="ml-3 text-red-400 hover:text-red-500 text-3xl">🗑️</button>
         `;
         card.onclick = () => playSong(i);
         container.appendChild(card);
         setTimeout(() => card.classList.add('visible'), 30 + i * 25);
       });
+    }
+
+    function deleteSong(index) {
+      if (!confirm("Delete this song permanently?")) return;
+      const tx = db.transaction('songs', 'readwrite');
+      const store = tx.objectStore('songs');
+      store.delete(songs[index].id).onsuccess = () => {
+        loadSongs();
+        if (currentIndex === index) document.getElementById('player').classList.add('hidden');
+      };
     }
 
     function handleUpload(e) {
@@ -200,7 +237,6 @@
     function nextSong() { if (currentIndex < songs.length-1) playSong(currentIndex+1); }
     function prevSong() { if (currentIndex > 0) playSong(currentIndex-1); }
 
-    // === NEW LANDSCAPE FEATURE ===
     function toggleVideoMode() {
       const song = songs[currentIndex];
       if (!song || !currentBlobUrl) return;
@@ -211,8 +247,6 @@
       modal.classList.remove('hidden');
       videoEl.play();
 
-      // Auto Fullscreen + Landscape
-      videoEl.requestFullscreen().catch(() => {});
       if (screen.orientation && typeof screen.orientation.lock === 'function') {
         screen.orientation.lock('landscape').catch(() => {});
       }
@@ -224,7 +258,7 @@
       videoEl.pause();
       modal.classList.add('hidden');
 
-      // Unlock orientation when closing
+      if (document.fullscreenElement) document.exitFullscreen();
       if (screen.orientation && typeof screen.orientation.unlock === 'function') {
         screen.orientation.unlock();
       }
